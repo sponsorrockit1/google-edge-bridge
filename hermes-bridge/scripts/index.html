@@ -1,9 +1,34 @@
 <!DOCTYPE html>
-<html><head></head><body>
+<html>
+<head>
+<meta charset="utf-8">
+</head>
+<body>
+<pre id="debug" style="font-size:12px;white-space:pre-wrap;word-break:break-all;padding:8px;"></pre>
 <script>
+function log(msg) {
+  document.getElementById('debug').textContent += msg + '\n';
+}
+
+function uuid() {
+  try {
+    return crypto.randomUUID();
+  } catch (e) {
+    return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+}
+
 window['ai_edge_gallery_get_result'] = async (data, secret) => {
   try {
-    const { prompt } = JSON.parse(data);
+    log('=== START ===');
+    log('data: ' + data);
+    log('secret: ' + (secret ? '[REDACTED ' + secret.length + ' chars]' : 'NULL'));
+
+    const jsonData = JSON.parse(data);
+    const prompt = jsonData.prompt;
+    log('prompt: ' + prompt);
+
+    log('fetching http://100.84.145.125:9900/ ...');
     const res = await fetch('http://100.84.145.125:9900/', {
       method: 'POST',
       headers: {
@@ -12,28 +37,47 @@ window['ai_edge_gallery_get_result'] = async (data, secret) => {
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
-        id: crypto.randomUUID(),
+        id: uuid(),
         method: 'SendMessage',
         params: {
           message: {
-            messageId: crypto.randomUUID(),
+            messageId: uuid(),
             role: 'ROLE_USER',
             parts: [{ text: prompt }]
           }
         }
       })
     });
-    const json = await res.json();
+    log('HTTP status: ' + res.status);
+
+    const text = await res.text();
+    log('raw response: ' + text.substring(0, 500));
+
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      log('JSON parse error: ' + e.message);
+      return JSON.stringify({ error: 'Bad JSON from server: ' + text.substring(0, 200) });
+    }
+
+    log('parsed JSON keys: ' + Object.keys(json).join(', '));
     if (json.error) {
+      log('server error: ' + JSON.stringify(json.error));
       return JSON.stringify({ error: json.error.message || 'A2A error' });
     }
-    // A2A SendMessage returns result.status.message.parts[].text
+
     const parts = json?.result?.status?.message?.parts || [];
-    const text = parts.map(p => p.text).join('\n');
-    return JSON.stringify({ result: text || '(empty response)' });
+    const resultText = parts.map(p => p.text).join('\n');
+    log('result text length: ' + resultText.length);
+    log('=== END ===');
+
+    return JSON.stringify({ result: resultText || '(empty response)', debug: document.getElementById('debug').textContent });
   } catch (e) {
-    return JSON.stringify({ error: e.message });
+    log('EXCEPTION: ' + e.message + '\n' + (e.stack || ''));
+    return JSON.stringify({ error: e.message, debug: document.getElementById('debug').textContent });
   }
 };
 </script>
-</body></html>
+</body>
+</html>
