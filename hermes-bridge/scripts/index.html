@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html><head></head><body>
+<script>
+window['ai_edge_gallery_get_result'] = async (data, secret) => {
+  try {
+    const { prompt } = JSON.parse(data);
+    const res = await fetch('http://100.84.145.125:9900/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${secret}`
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
+        method: 'SendMessage',
+        params: {
+          message: {
+            messageId: crypto.randomUUID(),
+            role: 'ROLE_USER',
+            parts: [{ text: prompt }]
+          }
+        }
+      })
+    });
+    const json = await res.json();
+    if (json.error) {
+      return JSON.stringify({ error: json.error.message || 'A2A error' });
+    }
+    // A2A SendMessage returns result.status.message.parts[].text
+    const parts = json?.result?.status?.message?.parts || [];
+    const text = parts.map(p => p.text).join('\n');
+    return JSON.stringify({ result: text || '(empty response)' });
+  } catch (e) {
+    return JSON.stringify({ error: e.message });
+  }
+};
+</script>
+</body></html>
